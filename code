@@ -1,0 +1,101 @@
+
+#####DENSENET 169...................
+
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import DenseNet169
+from tensorflow.keras.optimizers import RMSprop
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
+from sklearn.metrics import confusion_matrix, classification_report, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
+
+train_dir = '/kaggle/input/lung-new-ttv/LUNG_NEW_TODAYTTV/train'
+val_dir = '/kaggle/input/lung-new-ttv/LUNG_NEW_TODAYTTV/validation'
+test_dir = '/kaggle/input/lung-new-ttv/LUNG_NEW_TODAYTTV/test'
+
+# Data generators
+train_datagen = ImageDataGenerator(rescale=1.0/255.0)
+val_datagen = ImageDataGenerator(rescale=1.0/255.0)
+test_datagen = ImageDataGenerator(rescale=1.0/255.0)
+
+train_ds = train_datagen.flow_from_directory(train_dir, target_size=(224, 224), batch_size=32, class_mode='categorical')
+val_ds = val_datagen.flow_from_directory(val_dir, target_size=(224, 224), batch_size=32, class_mode='categorical')
+test_ds = test_datagen.flow_from_directory(test_dir, target_size=(224, 224), batch_size=32, class_mode='categorical', shuffle=False)
+
+# Load the DenseNet-169 model
+base_model = DenseNet169(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+
+# Adding custom layers
+x = base_model.output
+x = GlobalAveragePooling2D()(x)
+x = Dense(256, activation='relu', name='penultimate_layer')(x)  # Penultimate layer with 256 units
+predictions = Dense(4, activation='softmax')(x)  # Final layer with 4 classes
+
+model = Model(inputs=base_model.input, outputs=predictions)
+
+# Freeze the base model layers
+for layer in base_model.layers:
+    layer.trainable = False
+
+# Compile the model
+model.compile(optimizer=RMSprop(learning_rate=1e-5), loss='categorical_crossentropy', metrics=['accuracy'])
+
+history = model.fit(train_ds, validation_data=val_ds, epochs=50)
+
+# Save the model
+model.save('densenet169_modified_256units_no_dropout_NEW.h5')
+
+# Create a new model for feature extraction from the penultimate layer
+feature_extractor = Model(inputs=model.input, outputs=model.get_layer('penultimate_layer').output)
+
+# Extracting features from the penultimate layer using the test dataset
+features = feature_extractor.predict(test_ds)
+
+# Save the extracted features and labels
+np.save('densenet169_features_256_d.npy', features)
+labels = test_ds.classes  # Extract the true labels from the test dataset
+np.save('densenet169_labels_d.npy', labels)
+
+# Evaluate the model on the test dataset to get the test accuracy
+test_loss, test_accuracy = model.evaluate(test_ds)
+print(f'Test Accuracy: {test_accuracy:.4f}')
+
+# Evaluate the model and generate predictions
+predictions = model.predict(test_ds)
+predicted_classes = np.argmax(predictions, axis=1)
+
+# Confusion Matrix and Classification Report
+cm = confusion_matrix(labels, predicted_classes)
+cr = classification_report(labels, predicted_classes, target_names=list(test_ds.class_indices.keys()))
+
+# Print the Classification Report
+print(cr)
+
+# Plotting the accuracy and loss
+combined_history = {
+    'accuracy': history.history['accuracy'],
+    'val_accuracy': history.history['val_accuracy'],
+    'loss': history.history['loss'],
+    'val_loss': history.history['val_loss']
+}
+
+plt.figure(figsize=(12, 6))
+plt.plot(combined_history['accuracy'], label='Train Accuracy')
+plt.plot(combined_history['val_accuracy'], label='Validation Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.title('Model Accuracy')
+plt.legend()
+plt.show()
+
+plt.figure(figsize=(12, 6))
+plt.plot(combined_history['loss'], label='Train Loss')
+plt.plot(combined_history['val_loss'], label='Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.title('Model Loss')
+plt.legend()
+plt.show()
