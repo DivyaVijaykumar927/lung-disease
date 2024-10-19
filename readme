@@ -1,1 +1,2 @@
-Lung disease classification using deep learning, focusing on four classes: bacterial pneumonia, viral pneumonia, COVID-19, and normal cases. This project includes data preprocessing, deep learning model development, feature extraction, and concatenation techniques for enhanced accuracy.
+
+This project presents an automated system for classifying lung diseases from chest X-ray images using DenseNet models. It effectively distinguishes between bacterial pneumonia, COVID-19, viral pneumonia, and normal cases. By combining deep learning feature extraction with traditional classifiers, 
